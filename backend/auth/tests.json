@@ -1,0 +1,48 @@
+{
+  "tests": [
+    {
+      "name": "Request code with valid email",
+      "method": "POST",
+      "path": "/",
+      "body": {
+        "action": "request_code",
+        "email": "test@example.com"
+      },
+      "expectedStatus": 200,
+      "expectedBody": {
+        "success": true,
+        "message": "string"
+      },
+      "bodyMatcher": "partial"
+    },
+    {
+      "name": "Request code with invalid email",
+      "method": "POST",
+      "path": "/",
+      "body": {
+        "action": "request_code",
+        "email": "invalid"
+      },
+      "expectedStatus": 400,
+      "expectedBody": {
+        "error": "string"
+      },
+      "bodyMatcher": "partial"
+    },
+    {
+      "name": "Verify with wrong code",
+      "method": "POST",
+      "path": "/",
+      "body": {
+        "action": "verify_code",
+        "email": "test@example.com",
+        "code": "000000"
+      },
+      "expectedStatus": 401,
+      "expectedBody": {
+        "error": "string"
+      },
+      "bodyMatcher": "partial"
+    }
+  ]
+}

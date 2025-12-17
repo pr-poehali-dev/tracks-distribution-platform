@@ -6,6 +6,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import Icon from '@/components/ui/icon';
+import { useToast } from '@/hooks/use-toast';
 
 const mockTracks = [
   { id: 1, title: 'Neon Dreams', artist: 'DJ Nova', genre: 'Electronic', plays: '1.2M', cover: '🎵' },
@@ -20,15 +21,95 @@ const mockArtists = [
   { id: 3, name: 'Wave Riders', tracks: 15, followers: '67K', avatar: '🌊' },
 ];
 
+const API_URL = 'https://functions.poehali.dev/c0f502e5-5910-4cc9-92f1-31b3656174b3';
+
 const Index = () => {
   const [activeSection, setActiveSection] = useState('home');
-  const [showDashboard, setShowDashboard] = useState(false);
+  const [showLogin, setShowLogin] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [email, setEmail] = useState('');
+  const [code, setCode] = useState('');
+  const [codeSent, setCodeSent] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [user, setUser] = useState<any>(null);
+  const { toast } = useToast();
+
+  const handleRequestCode = async () => {
+    if (!email || !email.includes('@')) {
+      toast({ title: 'Ошибка', description: 'Введите корректный email', variant: 'destructive' });
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const response = await fetch(API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'request_code', email: email.toLowerCase().trim() })
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        setCodeSent(true);
+        toast({ title: 'Код отправлен!', description: 'Проверьте почту' });
+      } else {
+        toast({ title: 'Ошибка', description: data.error || 'Не удалось отправить код', variant: 'destructive' });
+      }
+    } catch (error) {
+      toast({ title: 'Ошибка', description: 'Проблема с подключением', variant: 'destructive' });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleVerifyCode = async () => {
+    if (!code || code.length !== 6) {
+      toast({ title: 'Ошибка', description: 'Введите 6-значный код', variant: 'destructive' });
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const response = await fetch(API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'verify_code', email: email.toLowerCase().trim(), code: code.trim() })
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.success) {
+        setUser(data.user);
+        setIsAuthenticated(true);
+        setShowLogin(false);
+        localStorage.setItem('user', JSON.stringify(data.user));
+        toast({ title: 'Успешно!', description: 'Вы вошли в систему' });
+      } else {
+        toast({ title: 'Ошибка', description: data.error || 'Неверный код', variant: 'destructive' });
+      }
+    } catch (error) {
+      toast({ title: 'Ошибка', description: 'Проблема с подключением', variant: 'destructive' });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleLogout = () => {
+    setIsAuthenticated(false);
+    setUser(null);
+    setEmail('');
+    setCode('');
+    setCodeSent(false);
+    localStorage.removeItem('user');
+    toast({ title: 'Вы вышли из системы' });
+  };
 
   return (
     <div className="min-h-screen bg-background">
       <header className="fixed top-0 w-full z-50 backdrop-blur-lg bg-background/80 border-b border-border">
         <div className="container mx-auto px-4 py-4 flex justify-between items-center">
-          <h1 className="text-2xl font-bold gradient-text">BEATWAVE</h1>
+          <h1 className="text-2xl font-bold gradient-text">Mixsønαr</h1>
           <nav className="hidden md:flex gap-6">
             {['home', 'catalog', 'service', 'contact'].map((section) => (
               <button
@@ -42,13 +123,84 @@ const Index = () => {
               </button>
             ))}
           </nav>
-          <Button onClick={() => setShowDashboard(!showDashboard)} className="gradient-bg">
-            {showDashboard ? 'Назад' : 'Войти'}
-          </Button>
+          {isAuthenticated ? (
+            <div className="flex items-center gap-3">
+              <span className="text-sm text-muted-foreground">{user?.email}</span>
+              <Button onClick={handleLogout} variant="outline" size="sm">Выйти</Button>
+            </div>
+          ) : (
+            <Button onClick={() => setShowLogin(true)} className="gradient-bg">
+              Войти
+            </Button>
+          )}
         </div>
       </header>
 
-      {showDashboard ? (
+      {showLogin && !isAuthenticated && (
+        <div className="fixed inset-0 z-50 bg-background/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <Card className="w-full max-w-md p-8 gradient-border">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-2xl font-bold gradient-text">Вход</h2>
+              <button onClick={() => setShowLogin(false)} className="text-muted-foreground hover:text-foreground">
+                <Icon name="X" size={24} />
+              </button>
+            </div>
+
+            {!codeSent ? (
+              <div className="space-y-4">
+                <div>
+                  <label className="text-sm font-medium mb-2 block">Email</label>
+                  <Input
+                    type="email"
+                    placeholder="your@email.com"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    onKeyPress={(e) => e.key === 'Enter' && handleRequestCode()}
+                  />
+                </div>
+                <Button 
+                  onClick={handleRequestCode} 
+                  disabled={loading}
+                  className="w-full gradient-bg"
+                >
+                  {loading ? 'Отправка...' : 'Получить код'}
+                </Button>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div>
+                  <label className="text-sm font-medium mb-2 block">Код из письма</label>
+                  <Input
+                    type="text"
+                    placeholder="123456"
+                    maxLength={6}
+                    value={code}
+                    onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))}
+                    onKeyPress={(e) => e.key === 'Enter' && handleVerifyCode()}
+                    className="text-center text-2xl tracking-widest"
+                  />
+                </div>
+                <Button 
+                  onClick={handleVerifyCode} 
+                  disabled={loading}
+                  className="w-full gradient-bg"
+                >
+                  {loading ? 'Проверка...' : 'Войти'}
+                </Button>
+                <Button 
+                  onClick={() => { setCodeSent(false); setCode(''); }} 
+                  variant="ghost"
+                  className="w-full"
+                >
+                  Назад
+                </Button>
+              </div>
+            )}
+          </Card>
+        </div>
+      )}
+
+      {isAuthenticated ? (
         <main className="pt-24 pb-12 px-4">
           <div className="container mx-auto max-w-6xl">
             <div className="mb-8">
@@ -84,11 +236,11 @@ const Index = () => {
               <Card className="p-6 gradient-border">
                 <div className="flex items-center gap-4">
                   <div className="p-3 rounded-lg bg-accent/20">
-                    <Icon name="Globe" className="text-accent" size={24} />
+                    <Icon name="DollarSign" className="text-accent" size={24} />
                   </div>
                   <div>
-                    <p className="text-2xl font-bold">15</p>
-                    <p className="text-sm text-muted-foreground">Платформ</p>
+                    <p className="text-2xl font-bold">70%</p>
+                    <p className="text-sm text-muted-foreground">Ваших роялти</p>
                   </div>
                 </div>
               </Card>
@@ -152,6 +304,11 @@ const Index = () => {
                         ))}
                       </div>
                     </div>
+                    <div className="bg-muted/50 p-4 rounded-lg">
+                      <p className="text-sm text-muted-foreground">
+                        💰 Роялти: <span className="font-bold text-primary">70%</span> вам, <span className="font-bold text-muted-foreground">30%</span> лейблу
+                      </p>
+                    </div>
                     <Button className="w-full gradient-bg">Загрузить и отправить на площадки</Button>
                   </div>
                 </Card>
@@ -172,7 +329,7 @@ const Index = () => {
                   Дистрибуция треков на Spotify, Apple Music, YouTube и другие платформы за минуты
                 </p>
                 <div className="flex gap-4 justify-center">
-                  <Button size="lg" className="gradient-bg text-lg px-8" onClick={() => setShowDashboard(true)}>
+                  <Button size="lg" className="gradient-bg text-lg px-8" onClick={() => setShowLogin(true)}>
                     Начать сейчас <Icon name="ArrowRight" className="ml-2" size={20} />
                   </Button>
                   <Button size="lg" variant="outline" className="text-lg px-8" onClick={() => setActiveSection('catalog')}>
@@ -196,8 +353,8 @@ const Index = () => {
 
                 <Card className="p-6 gradient-border hover:scale-105 transition-transform">
                   <div className="text-4xl mb-4">💰</div>
-                  <h3 className="text-xl font-semibold mb-2">100% роялти</h3>
-                  <p className="text-muted-foreground">Вы получаете все отчисления от своей музыки</p>
+                  <h3 className="text-xl font-semibold mb-2">70% роялти</h3>
+                  <p className="text-muted-foreground">Вы получаете большую часть отчислений от своей музыки</p>
                 </Card>
               </div>
             </div>
@@ -289,7 +446,7 @@ const Index = () => {
                 <div className="grid md:grid-cols-3 gap-6 mt-8">
                   <Card className="p-6 text-center gradient-border">
                     <Icon name="Mail" className="mx-auto mb-2 text-primary" size={24} />
-                    <p className="text-sm text-muted-foreground">info@beatwave.com</p>
+                    <p className="text-sm text-muted-foreground">info@mixsonar.com</p>
                   </Card>
                   <Card className="p-6 text-center gradient-border">
                     <Icon name="Phone" className="mx-auto mb-2 text-secondary" size={24} />
@@ -297,7 +454,7 @@ const Index = () => {
                   </Card>
                   <Card className="p-6 text-center gradient-border">
                     <Icon name="MessageCircle" className="mx-auto mb-2 text-accent" size={24} />
-                    <p className="text-sm text-muted-foreground">Telegram: @beatwave</p>
+                    <p className="text-sm text-muted-foreground">Telegram: @mixsonar</p>
                   </Card>
                 </div>
               </div>
@@ -308,7 +465,7 @@ const Index = () => {
             <div className="container mx-auto max-w-6xl">
               <div className="grid md:grid-cols-4 gap-8 mb-8">
                 <div>
-                  <h3 className="font-bold text-xl mb-4 gradient-text">BEATWAVE</h3>
+                  <h3 className="font-bold text-xl mb-4 gradient-text">Mixsønαr</h3>
                   <p className="text-sm text-muted-foreground">Дистрибуция музыки на все площадки</p>
                 </div>
                 <div>
@@ -316,7 +473,7 @@ const Index = () => {
                   <ul className="space-y-2 text-sm text-muted-foreground">
                     <li>Дистрибуция</li>
                     <li>Аналитика</li>
-                    <li>Роялти</li>
+                    <li>Роялти 70/30</li>
                   </ul>
                 </div>
                 <div>
@@ -343,7 +500,7 @@ const Index = () => {
                 </div>
               </div>
               <div className="text-center text-sm text-muted-foreground pt-8 border-t border-border">
-                © 2024 BEATWAVE. Все права защищены.
+                © 2024 Mixsønαr. Все права защищены.
               </div>
             </div>
           </footer>
